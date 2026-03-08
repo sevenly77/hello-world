@@ -1,18 +1,221 @@
 <!DOCTYPE html>
-
-<html>
+<html lang="zh-CN">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-  <title>my-first-website</title>
-  <LINK href="styles.css" rel="stylesheet" type="text/css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>飞机射击小游戏</title>
+  <link href="styles.css" rel="stylesheet" type="text/css" />
 </head>
-
 <body>
+  <main class="game-wrap">
+    <h1>✈️ 飞机射击小游戏</h1>
+    <p class="tips">操作：← → 或 A / D 移动，空格发射子弹，R 重新开始</p>
+    <div class="hud">
+      <span id="score">分数：0</span>
+      <span id="lives">生命：3</span>
+    </div>
+    <canvas id="game" width="420" height="640" aria-label="飞机射击游戏"></canvas>
+    <p id="status" class="status"></p>
+  </main>
 
-<img src="https://octodex.github.com/images/daftpunktocat-thomas.gif" id="octocat" alt="octocat-gif" />
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const statusEl = document.getElementById('status');
 
-<!-- Change this code here by copy and pasting your template on line 15 -->
-<p>Welcome to your first GitHub Pages website!</p>
+    const state = {
+      running: true,
+      score: 0,
+      lives: 3,
+      keys: {},
+      player: { x: canvas.width / 2 - 18, y: canvas.height - 90, w: 36, h: 52, speed: 6 },
+      bullets: [],
+      enemies: [],
+      bulletCooldown: 0,
+      enemyTimer: 0,
+      speedScale: 1,
+      frame: 0
+    };
 
+    function resetGame() {
+      state.running = true;
+      state.score = 0;
+      state.lives = 3;
+      state.bullets = [];
+      state.enemies = [];
+      state.bulletCooldown = 0;
+      state.enemyTimer = 0;
+      state.speedScale = 1;
+      state.frame = 0;
+      state.player.x = canvas.width / 2 - state.player.w / 2;
+      statusEl.textContent = '';
+      updateHud();
+    }
+
+    function updateHud() {
+      scoreEl.textContent = `分数：${state.score}`;
+      livesEl.textContent = `生命：${state.lives}`;
+    }
+
+    function spawnEnemy() {
+      const size = 28 + Math.random() * 18;
+      state.enemies.push({
+        x: Math.random() * (canvas.width - size),
+        y: -size,
+        w: size,
+        h: size,
+        speed: (2 + Math.random() * 2) * state.speedScale
+      });
+    }
+
+    function shoot() {
+      state.bullets.push({
+        x: state.player.x + state.player.w / 2 - 2,
+        y: state.player.y - 14,
+        w: 4,
+        h: 12,
+        speed: 9
+      });
+    }
+
+    function collide(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function update() {
+      if (!state.running) return;
+      state.frame += 1;
+
+      if (state.keys['ArrowLeft'] || state.keys['a']) state.player.x -= state.player.speed;
+      if (state.keys['ArrowRight'] || state.keys['d']) state.player.x += state.player.speed;
+
+      state.player.x = Math.max(0, Math.min(canvas.width - state.player.w, state.player.x));
+
+      if (state.keys[' '] && state.bulletCooldown <= 0) {
+        shoot();
+        state.bulletCooldown = 10;
+      }
+      state.bulletCooldown -= 1;
+
+      state.bullets.forEach((b) => (b.y -= b.speed));
+      state.bullets = state.bullets.filter((b) => b.y + b.h > 0);
+
+      state.enemyTimer -= 1;
+      if (state.enemyTimer <= 0) {
+        spawnEnemy();
+        const base = Math.max(25, 65 - Math.floor(state.score / 40));
+        state.enemyTimer = base;
+      }
+
+      state.enemies.forEach((e) => (e.y += e.speed));
+
+      for (let i = state.enemies.length - 1; i >= 0; i--) {
+        const e = state.enemies[i];
+
+        if (e.y > canvas.height) {
+          state.enemies.splice(i, 1);
+          state.lives -= 1;
+          updateHud();
+          continue;
+        }
+
+        if (collide(state.player, e)) {
+          state.enemies.splice(i, 1);
+          state.lives -= 1;
+          updateHud();
+          continue;
+        }
+
+        for (let j = state.bullets.length - 1; j >= 0; j--) {
+          if (collide(state.bullets[j], e)) {
+            state.bullets.splice(j, 1);
+            state.enemies.splice(i, 1);
+            state.score += 10;
+            state.speedScale = 1 + state.score / 250;
+            updateHud();
+            break;
+          }
+        }
+      }
+
+      if (state.lives <= 0) {
+        state.running = false;
+        statusEl.textContent = '游戏结束！按 R 重新开始';
+      }
+    }
+
+    function drawBackground() {
+      const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      g.addColorStop(0, '#001e3c');
+      g.addColorStop(1, '#0a3d62');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      for (let i = 0; i < 40; i++) {
+        const x = (i * 97 + state.frame * 0.7) % canvas.width;
+        const y = (i * 53 + state.frame * 1.2) % canvas.height;
+        ctx.fillRect(x, y, 2, 2);
+      }
+    }
+
+    function drawPlayer() {
+      const p = state.player;
+      ctx.save();
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+      ctx.fillStyle = '#74b9ff';
+      ctx.beginPath();
+      ctx.moveTo(0, -p.h / 2);
+      ctx.lineTo(-p.w / 2, p.h / 2);
+      ctx.lineTo(0, p.h / 4);
+      ctx.lineTo(p.w / 2, p.h / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#dff9fb';
+      ctx.fillRect(-3, -p.h / 2 + 10, 6, 16);
+      ctx.restore();
+    }
+
+    function draw() {
+      drawBackground();
+
+      ctx.fillStyle = '#ffeaa7';
+      state.bullets.forEach((b) => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+      ctx.fillStyle = '#ff7675';
+      state.enemies.forEach((e) => {
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+        ctx.fillStyle = '#fab1a0';
+        ctx.fillRect(e.x + e.w * 0.2, e.y + e.h * 0.2, e.w * 0.6, e.h * 0.6);
+        ctx.fillStyle = '#ff7675';
+      });
+
+      drawPlayer();
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      state.keys[key] = true;
+      if (key === ' ') e.preventDefault();
+      if (key === 'r' && !state.running) resetGame();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      state.keys[key] = false;
+    });
+
+    resetGame();
+    loop();
+  </script>
 </body>
 </html>
